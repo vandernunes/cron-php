@@ -2,8 +2,6 @@ FROM getupcloud/cron-base-centos7
 
 MAINTAINER Vander Nunes <vander.nunes@getupcloud.com>
 
-EXPOSE 8080
-
 ENV PHP_VERSION=5.6 \
     PATH=$PATH:/opt/rh/rh-php56/root/usr/bin
 
@@ -14,7 +12,6 @@ LABEL io.k8s.description="Platform for building and running PHP 5.6 applications
 
 USER root
 
-# Install Apache httpd and PHP
 RUN yum install -y centos-release-scl && \
     INSTALL_PKGS="rh-php56 rh-php56-php rh-php56-php-mysqlnd rh-php56-php-pgsql rh-php56-php-bcmath \
                   rh-php56-php-gd rh-php56-php-intl rh-php56-php-ldap rh-php56-php-mbstring rh-php56-php-pdo \
@@ -24,15 +21,6 @@ RUN yum install -y centos-release-scl && \
     rpm -V $INSTALL_PKGS && \
     yum clean all -y
 
-# Allow cron as user
-RUN chmod 777 /var/spool/cron/ /var/run/ && \
-    chmod u-s /usr/bin/crontab /bin/crontab && \
-    chmod u+s /usr/sbin/crond /lib64/libnss_wrapper.so* /lib64/libuid_wrapper.so* && \
-    sed -i -s 's/^\(account\s\+include\s\+password-auth\)$/#\1/' /etc/pam.d/crond && \
-    echo -e 'user\ndefault' > /etc/cron.allow && rm -f /etc/cron.deny && \
-    mkdir -p /etc/cron/{minutely,hourly,daily,weekly,monthly} && \
-    chmod -R g+rw /etc /var/log
-
 # Copy the S2I scripts from the specific language image to $STI_SCRIPTS_PATH
 COPY ./s2i/bin/ $STI_SCRIPTS_PATH
 
@@ -41,20 +29,6 @@ COPY ./s2i/bin/ $STI_SCRIPTS_PATH
 COPY ./contrib/ /opt/app-root
 
 RUN chown -R 1001:0 /opt/app-root
-
-# In order to drop the root user, we have to make some directories world
-# writeable as OpenShift default security model is to run the container under
-# random UID.
-RUN sed -i -f /opt/app-root/etc/httpdconf.sed /opt/rh/httpd24/root/etc/httpd/conf/httpd.conf && \
-    echo "IncludeOptional /opt/app-root/etc/conf.d/*.conf" >> /opt/rh/httpd24/root/etc/httpd/conf/httpd.conf && \
-    sed -i '/php_value session.save_path/d' /opt/rh/httpd24/root/etc/httpd/conf.d/rh-php56-php.conf && \
-    head -n151 /opt/rh/httpd24/root/etc/httpd/conf/httpd.conf | tail -n1 | grep "AllowOverride All" || exit && \
-    mkdir /tmp/sessions && \
-    chown -R 1001:0 /opt/app-root /tmp/sessions && \
-    chmod -R a+rwx /tmp/sessions && \
-    chmod -R ug+rwx /opt/app-root && \
-    chmod -R a+rwx /etc/opt/rh/rh-php56 && \
-    chmod -R a+rwx /opt/rh/httpd24/root/var/run/httpd
 
 USER 1001
 
